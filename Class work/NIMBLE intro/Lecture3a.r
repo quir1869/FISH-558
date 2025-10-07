@@ -67,9 +67,36 @@ mcmc.out <- nimbleMCMC(model=Cpump,
                        samplesAsCodaMCMC = TRUE,
                        summary = TRUE, WAIC = TRUE)
 
+
+hist(mcmc.out)
+
+plot(mcmc.out)
+
 print(str(mcmc.out))
 mcmc.out$summary
 
 
 pumpConf <- configureMCMC(pump, print = TRUE)
 
+
+
+library(coda)  # since nimble outputs mcmc.list objects
+
+# Extract samples from all chains
+all_samples <- as.mcmc(do.call(rbind, mcmc.out$samples))
+
+# Example: histogram for alpha
+hist(all_samples[, "alpha"], 
+     breaks = 50, 
+     main = "Posterior of alpha", 
+     xlab = "alpha")
+
+hist(all_samples[, "beta"], 
+     breaks = 50, 
+     main = "Posterior of alpha", 
+     xlab = "alpha")
+
+hist(all_samples[, "theta[3]"], 
+     breaks = 50, 
+     main = "Posterior of alpha", 
+     xlab = "alpha")

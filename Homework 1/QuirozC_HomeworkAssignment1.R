@@ -20,7 +20,7 @@
     z <- 2.39 # Predetermined Pella-Tomlinson parameter
     
     # Calcualte subsequent years
-    for (t in 2:length(N)) {
+    for (t in 2:(length(N)+1)) {
       N[t] <- N[t-1] + r * N[t-1] * (1 - (N[t-1]/K)^z) - data$Catch[t-1]
     }
     
@@ -33,16 +33,24 @@
   likelihood <- function(param.vec) {
   
     # Get parameter values from parameter vector
-    r <- param.vec[1]
-    K <- param.vec[2]
-    tao <- abs(param.vec[3])
+    r <- exp(param.vec[1])
+    K <- exp(param.vec[2])
+    tao <- exp(abs(param.vec[3]))
+    
+    #
+    # r <- param.vec[1]
+    # K <- param.vec[2]
+    # tao <- abs(param.vec[3])
     
     # Get observation error standard deviation
-    sigma_t <- sqrt(data$CV + tao)
+    sigma_t <- sqrt(data$CV^2 + tao^2)
     
     # Get the number of indivudals
     N <- pop.model(r = r, K = K)
     
+    
+    # Get non-NA indexes
+    non_na_idx <- which(!is.na(data$Abundance))
     
     # TESTING (COMMENT BEFORE RUNNING LIKELIHOOD FUNCTION)
     # test_vector <- rep(NA, length(data$Abundance))
@@ -50,9 +58,23 @@
     # test_vector[indexes] <-  900000 # Some really large number to test in likelihood function
     
     # Calculate likelihood
-    Likelihood <- prod((1/sigma_t * exp(-((log(N)-log(data$Abundance))^2)/(2*sigma_t^2))), na.rm = TRUE)
+    # Check if there's NAs. If there are, return a really high likelihood since the model isn't being fit.
+    # Otherwise, compute likelihood.
+    if(all(!is.na(N[non_na_idx]))) {
+      
+      Likelihood <- prod((1/sigma_t * exp(-((log(N)-log(data$Abundance))^2)/(2*sigma_t^2))), na.rm = TRUE)
+      return(-log(Likelihood))
+      
+    } else {
+      
+      Likelihood <- 0.0001
+      return(-log(Likelihood))
+      
+    }
+    
+    print(Likelihood)
     # Likelihood <- prod((1/sigma_t * exp(-((log(test_vector)-log(data$Abundance))^2)/(2*sigma_t^2))), na.rm = TRUE)
-    return(-log(Likelihood))
+    
     
   }
   
@@ -119,10 +141,6 @@
   
   # This is basically a four dimensional negative log likelihood surface we are trying to traverse. There's no way we can
   # locate the global minimum with the current method.
-  # The lowest likelihood value given our setup is 0 and that's
-  # another reason we can't ever find the true minimum.
-  # Because all the good low points have a likelihood of 0. I think we can do given our likelihood formula is 0. Not sure if that's how the likelihood
-  # formula actually bounds it at 0, but I'm not sure that doesn't captures the analytical bounds of the MLE value.
   
   # THIS IS WHY IT IS SUCH A BIG ISSUE Because wherever you traverse the likelihood terrain with a model setup like this, different scientists
   # Will converge to different theories and they technicaly are both correct if their likelihoods are both "0" due to software + numerical
@@ -136,18 +154,16 @@
   # as loss would be a different way to represent likelihood in a broader machine learning problem? Since both frequentist / Bayesian methods are both trying to find
   # the global minimum in one way or another.
   
-  param.vec <- c(0.1, 600, 255)
-  result <- optim(par = param.vec, fn = likelihood, method = "Nelder-Mead")
-  
   MLE <- Inf   # Start with Inf, since we are minimizing
   params <- NULL
   iteration <- 0
   
-  for (r in seq(0.07, 0.09, by = 0.01)) {
-    for (K in seq(900, 1000, by = 50)) {
-      for (tao in seq(0.05, 0.6, by = 0.05)) {
+  for (r in seq(0.085, 0.15, by = 0.007)) {
+    for (K in seq(1000, 1100, by = 50)) {
+      for (tao in seq(0.05, 0.8, by = 0.2)) {
         
-        param.vec <- c(r, K, tao)
+        param.vec <- log(c(r, K, tao))
+        # param.vec <- c(r, K, tao)
         
         # Insert a catch so that if an error occurs from bad starting params (e.g., r = 0 --> error), 
         # it will continue to the next loop iteration and repeat until the optim() works properly,
@@ -182,19 +198,23 @@
 
 # For putting into plot for graphing observed vs expected data. Tao not needed because it was only used for nll,
 # not producing an actual model abundance point.
-r_MLE <- params[1]
+r_MLE <- exp(params[1])
 
-K_MLE <- params[2]
+K_MLE <- exp(params[2])
 
-tao_MLE <- params[3]
+tao_MLE <- exp(params[3])
+
+# Print out MLE
+MLE
 
 # Plot model to observed data
 B_MLE <- pop.model(r = r_MLE, K = K_MLE) %>% # MLE predictions
-  tibble(Abundance_MLE = .)
+  tibble(Year = 1922:2005,
+         Abundance_MLE = .)
 
 # Join MLE estimates to observed data
 (MLE_plot <- data %>%
-  bind_cols(B_MLE) %>%
+    full_join(B_MLE, by = "Year") %>%
   pivot_longer(cols = c("Abundance", "Abundance_MLE")) %>%
   mutate(name = case_when(
     name == "Abundance" ~ "Observed abundance",
@@ -209,7 +229,7 @@ B_MLE <- pop.model(r = r_MLE, K = K_MLE) %>% # MLE predictions
        color = "Data type") +
   scale_color_manual(values = c("blue", "red")))
 
-ggsave("MLE_plot.jpg", plot = MLE_plot, device = "png", units = "in", width = 6.5, height = 4)
+ggsave("Homework 1/MLE_plot.jpg", plot = MLE_plot, device = "png", units = "in", width = 6.5, height = 4)
 
 
 
@@ -229,23 +249,34 @@ likelihood <- function(param.vec, r = 0.078) {
   # Get observation error standard deviation
   sigma_t <- sqrt(data$CV + tao)
   
-  # Get the number of indivudals
+  # Get the number of individuals
   N <- pop.model(r = r, K = K)
   
-  # Calculate likelihood
-  Likelihood <- sum((1/sigma_t * exp(-((log(N)-log(data$Abundance))^2)/(2*sigma_t^2))), na.rm = TRUE)
-  return(-log(Likelihood))
+  if(all(!is.na(N[non_na_idx]))) {
+    
+    Likelihood <- prod((1/sigma_t * exp(-((log(N)-log(data$Abundance))^2)/(2*sigma_t^2))), na.rm = TRUE)
+    return(-log(Likelihood))
+    
+  } else {
+    
+    Likelihood <- 0.0001
+    return(-log(Likelihood))
+    
+  }
   
 }
 
 
 # make r.seq once
-r.seq <- seq(0.07, 0.091, 0.001)
+r.seq <- seq(0.1, 0.2, by = 0.005)
 param.vec <- c(K_MLE, tao_MLE)
 
 profile <- matrix(NA, nrow = length(r.seq), ncol = 2)
 colnames(profile) <- c("r", "Likelihood")
 profile[,1] <- r.seq   # first col = fixed r values
+
+K_vals <- c()
+tao_vals <- c()
 
 for (i in seq_along(r.seq)) {
   r <- r.seq[i]
@@ -253,6 +284,8 @@ for (i in seq_along(r.seq)) {
   
   # use i instead of which()
   profile[i, 2] <- output$value
+  K_vals[i] <- output$par[1]
+  tao_vals[i] <- output$par[2]
 }
 
 
@@ -261,11 +294,47 @@ for (i in seq_along(r.seq)) {
 # Visualize profile
 (likelihood_profile <- data.frame(profile) %>%
     mutate(MSYR = 0.705 * r) %>%
-  ggplot((aes(x = r, y = Likelihood))) +
+  ggplot((aes(x = MSYR, y = Likelihood))) +
   geom_point() +
     geom_line() +
     theme_light() +
-    labs(y = "Negative log likelihood"))
+    labs(y = "Negative log likelihood") +
+    geom_vline(xintercept = r_MLE * 0.705, color ="red", linetype = "dashed") +
+    annotate("text",label = expression(bold("r \"MLE\" from\ngrid serach")), x = (r_MLE+0.01) * 0.705, y = 0.85, color = "red"))
+
 
 # Save likelihood profile
-ggsave("likelihood_profile.jpg", plot = likelihood_profile, device = "png", units = "in", width = 6.5, height = 4)
+ggsave("Homework 1/likelihood_profile.jpg", plot = likelihood_profile, device = "png", units = "in", width = 6.5, height = 4)
+
+
+# Create new model fit based on minimum produced from likelihood profile
+min_index <- which(min(profile[,"Likelihood"]) == profile[,"Likelihood"])
+r_new_min <- profile[min_index,"r"]
+K_new_min <- K_vals[min_index]
+
+# Plot model to observed data
+B_MLE <- pop.model(r = r_new_min, K = K_new_min) %>% # MLE predictions
+  tibble(Abundance_MLE = .)
+
+
+
+# Join MLE estimates to observed data
+(MLE_plot <- data %>%
+    bind_cols(B_MLE) %>%
+    pivot_longer(cols = c("Abundance", "Abundance_MLE")) %>%
+    mutate(name = case_when(
+      name == "Abundance" ~ "Observed abundance",
+      name == "Abundance_MLE" ~ "MLE abundance prediction"
+    )) %>%
+    ggplot(aes(x = Year, y = value, color = name)) +
+    geom_line() +
+    geom_point() +
+    theme_light() +
+    theme(legend.position = "bottom") +
+    labs(x = "", y = "Abundance (# whales)",
+         color = "Data type") +
+    scale_color_manual(values = c("blue", "red")))
+
+
+ggsave("Homework 1/fake_MLE_plot.jpg", plot = MLE_plot, device = "png", units = "in", width = 6.5, height = 4)
+
