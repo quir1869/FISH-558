@@ -185,6 +185,9 @@ MCMC_output <- DoMCMC(Xinit = params, DataUsed = mosquito_obs, Ndim = length(par
 # Write to RDS
 saveRDS(MCMC_output, file = "Homework 4/MCMC_output.rds")
 
+# Read in RDS
+readRDS()
+
 
 
 ##########################################
