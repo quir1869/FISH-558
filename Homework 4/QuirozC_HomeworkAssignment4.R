@@ -186,7 +186,7 @@ MCMC_output <- DoMCMC(Xinit = params, DataUsed = mosquito_obs, Ndim = length(par
 saveRDS(MCMC_output, file = "Homework 4/MCMC_output.rds")
 
 # Read in RDS
-readRDS()
+MCMC_output <- readRDS("Homework 4/MCMC_output.rds")
 
 
 
@@ -209,9 +209,9 @@ B %>%
 ##########################################
 
 # Get alpha posterior predictive
-mu_7 <- (MCMC_output[,12] / sum(MCMC_output[,12])) 
+mu_7 <- MCMC_output[,12]
 
-alpha_7 <- (MCMC_output[,32] / sum(MCMC_output[,32]))
+alpha_7 <- MCMC_output[,32]
 
 posterior_predictive <- data.frame(matrix(ncol = length(colnames(mosquito_obs)),
                                nrow = length(mu_7)))
@@ -220,19 +220,34 @@ colnames(posterior_predictive) <- c("0m","10m","20m","30m","40m","50m","60m","70
 for (distance in 1:ncol(posterior_predictive)) {
   
   predictions <- mu_7 * exp(alpha_7 * ((distance - 1)  * 10))
+  
+  # Get predictive distribution
+  predictions <- rpois(n = length(predictions), lambda = predictions)
+  
+  # Assign predictive distribution to data frame
   posterior_predictive[, distance] <- predictions
 
 }
+
+observed_values <- data.frame(distance = c("0m","10m","20m","30m","40m","50m","60m","70m","80m","90m", "100m"),
+                              observation = mosquito_obs[7,])
 
  (posterior_predictive_plot <- posterior_predictive %>%
   pivot_longer(cols = everything(),
                names_to = "distance",
                values_to = "prediction") %>%
+     left_join(observed_values, by = "distance") %>%
+     mutate(distance = factor(distance, levels = c("0m","10m","20m","30m","40m","50m","60m","70m","80m","90m", "100m"))) %>%
   ggplot(aes(x = prediction, fill = distance)) +
   geom_histogram(bins = 30, color = "white") +
   facet_wrap(~distance, ncol = 1, scales = "free_y") +
+     geom_vline(aes(xintercept = observation), linetype = "dashed", linewidth = 0.8) +
   theme_light() +
-  theme(legend.position = "bottom"))
+  theme(legend.position = "bottom") +
+     labs(x = "# of mosquitos", y = "# of posterior predictive samples", fill = "Transect distance"))
 
-ggsave("Homework 4/posterior_predictive.jpg", posterior_predictive_plot, width = 4, height = 15, units = "in", device = "jpg")
+ggsave("Homework 4/posterior_predictive.jpg", posterior_predictive_plot, width = 4, height = 13, units = "in", device = "jpg")
+
+
+
 
