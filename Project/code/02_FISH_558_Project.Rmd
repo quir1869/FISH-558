@@ -18,6 +18,8 @@ library(dplyr)
 library(tidyr)
 library(MARSS)
 
+all_risk_data <- read.csv("../output/all_risk_data_fish558.csv")
+
 # 1️⃣ Prepare data
 x <- all_risk_data %>%
   rename(iso3c = consumer_iso3c) %>%
