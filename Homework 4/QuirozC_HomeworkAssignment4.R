@@ -114,6 +114,7 @@ print(NLL) # 645.4353
 
 DoMCMC<-function(Xinit,DataUsed,Ndim,covar,Nsim=1000,Nburn=0,Nthin=1, scalar)
 {
+  set.seed(52)
   Xcurr <- Xinit
   Fcurr <- -1 * calculate_NLL(params = Xcurr, DataUsed = mosquito_obs)
   Outs <- matrix(0,nrow=(Nsim-Nburn),ncol=(Ndim+1))
@@ -129,12 +130,8 @@ DoMCMC<-function(Xinit,DataUsed,Ndim,covar,Nsim=1000,Nburn=0,Nthin=1, scalar)
     
     repeat
     {
-      
-      if (Isim <= Nburn) {
+  
         varcovar <- scalar * covar
-      } else {
-        varcovar <- covar
-      }
       
       Xnext <- rmvnorm(1, mean=Xcurr, sigma=varcovar)
       Fnext <- -1 *calculate_NLL(Xnext, DataUsed = mosquito_obs)
@@ -246,7 +243,7 @@ observed_values <- data.frame(distance = c("0m","10m","20m","30m","40m","50m","6
   theme(legend.position = "bottom") +
      labs(x = "# of mosquitos", y = "# of posterior predictive samples", fill = "Transect distance"))
 
-ggsave("Homework 4/posterior_predictive.jpg", posterior_predictive_plot, width = 4, height = 13, units = "in", device = "jpg")
+ggsave("Homework 4/posterior_predictive2.jpg", posterior_predictive_plot, width = 4, height = 13, units = "in", device = "jpg")
 
 
 

@@ -1,0 +1,116 @@
+---
+title: "FISH 558 Project"
+author: "Connor Quiroz"
+date: "2025-10-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("MARSS")
+library(MARSS)
+library(dplyr)
+library(tidyverse)
+```
+
+```{r state space model}
+library(dplyr)
+library(tidyr)
+library(MARSS)
+
+# 1️⃣ Prepare data
+x <- all_risk_data %>%
+  rename(iso3c = consumer_iso3c) %>%
+  relocate(region, .before = "iso3c") %>%
+  group_by(year, region) %>%
+  summarize(vulnerability = mean(vulnerability, na.rm = TRUE), .groups = "drop")
+
+# 2️⃣ Pivot to matrix form: rows = regions, columns = years
+y <- x %>%
+  pivot_wider(names_from = year, values_from = vulnerability) %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+
+n_regions <- nrow(y)       
+n_times   <- ncol(y)       
+n_states  <- 2 * n_regions 
+
+# 3️⃣ Initial states for inits only
+x0_level <- y[, 1]                 # level = first observed value
+x0_slope <- y[, 2] - y[, 1]        # slope = first difference
+x0_init  <- c(x0_level, x0_slope)  # combine
+
+# 4️⃣ Observation matrix
+Z <- matrix(0, nrow = n_regions, ncol = n_states)
+for(i in 1:n_regions){
+  Z[i, i] <- 1
+}
+
+# 5️⃣ State transition matrix
+B <- matrix(0, nrow = n_states, ncol = n_states)
+for(i in 1:n_regions){
+  B[i, i] <- 1
+  B[i, n_regions + i] <- 1
+  B[n_regions + i, n_regions + i] <- 1
+}
+
+# 6️⃣ Define MARSS model (x0 only a string)
+model.list <- list(
+  B = B,
+  U = matrix(0, n_states, 1),
+  Q = "unconstrained",
+  Z = Z,
+  R = diag(rep(0.01, 6)),
+  x0 = "unequal",   # estimate each state
+  tinitx = 0
+)
+
+# Convert x0_init to column matrix
+x0_init_mat <- matrix(x0_init, nrow = n_states, ncol = 1)
+
+fit <- MARSS(
+  y,
+  model = model.list,
+  inits = list(x0 = x0_init_mat),
+  silent = FALSE
+)
+
+# 8️⃣ Smoothed states
+smoothed <- fit$states
+
+```
+
+```{r}
+# Suppose `fit` is your MARSS fit object
+smoothed_states <- fit$states   # 12 rows (6 levels + 6 slopes) x T columns (time)
+
+n_regions <- 6
+n_times <- ncol(smoothed_states)
+years <- 1996:2019             # your time points
+region_names <- c("Africa", "Asia", "Europe", "North America", "Oceania", "South America")
+
+# Extract levels (rows 1:6)
+levels <- smoothed_states[1:n_regions, ]
+
+# Convert to long/tidy format for plotting
+levels_long <- as.data.frame(levels) %>%
+  mutate(region = region_names) %>%
+  pivot_longer(cols = -region, names_to = "year_idx", values_to = "predicted_vulnerability") %>%
+  mutate(year = years[as.integer(str_remove(year_idx, "V"))])
+
+# Combine with original data for plotting
+x_long <- x %>%
+  mutate(year = as.integer(year))   # ensure year is integer
+
+plot_df <- levels_long %>%
+  left_join(x_long, by = c("region", "year"))
+
+# Plot actual vs smoothed
+ggplot(plot_df, aes(x = year)) +
+  geom_point(aes(y = vulnerability), color = "black") +      # actual data
+  geom_line(aes(y = predicted_vulnerability, color = region), size = 1) +  # smoothed
+  facet_wrap(~region, scales = "free_y") +
+  theme_minimal() +
+  labs(y = "Vulnerability", title = "MARSS Smoothed Estimates vs Data")
+```
+

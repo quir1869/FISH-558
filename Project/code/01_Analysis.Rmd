@@ -1,0 +1,97 @@
+---
+title: "01_Analysis"
+author: "Connor Quiroz"
+date: "2025-03-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# General data cleaning + visualization + analysis packages
+library(tidyverse)
+library(ggformula)
+library(countrycode)
+library(data.table)
+library(arrow)
+library(cowplot)
+library(RColorBrewer)
+
+# Map creation
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+library(dirmult)
+
+# Load in packages needed for ARTIS
+library(devtools)
+library(tidytext)
+# devtools::install_github("davidsjoberg/ggsankey")
+library(ggsankey)
+# devtools::install_github("Seafood-Globalization-Lab/exploreARTIS@v1.0.0", dependencies = TRUE)
+library(exploreARTIS)
+library(here)
+knitr::opts_knit$set(root.dir = paste0(here(),"/code"))
+```
+
+```{r initialize functions}
+# Load in map creation function
+source("../R/create_map.R")
+```
+
+
+# Objective
+
+Calculate the risk index given the components for a country's exposure, sensitivity, and adaptive capacity. 
+
+```{r}
+# Calculate risk
+source("../R/calculate_risk_558.R")
+# Loop through years 1996 to 2019 and calculate risk for each
+all_risk_data <- map_dfr(1996:2019, function(year) {
+  # Construct file path
+  file_path <- paste0("../data/annual_e_s_ac_data/e_s_ac_data_", year, ".parquet")
+  
+  # Check if file exists
+  if (!file.exists(file_path)) {
+    warning(paste("File not found:", file_path))
+    return(NULL)
+  }
+  
+  # Read data and calculate risk
+  data <- read_parquet(file_path)
+  risk <- calculate_risk(data)
+  
+  # Add year column to track which year the data is from
+  risk <- risk %>%
+    mutate(year = year, .before = 1)
+  
+  return(risk)
+})
+
+(risk_time_series <- all_risk_data %>%
+  rename(iso3c = consumer_iso3c) %>%
+  # left_join(regions, by = c("iso3c" = "consumer_iso3c")) %>%
+  relocate(region, .before = "iso3c") %>%
+  group_by(year, region) %>%
+  summarize(vulnerability = mean(vulnerability, na.rm = TRUE)) %>%
+  ggplot(aes(x = year, y = vulnerability, color = region)) +
+  geom_point(size = 0.8) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 4, angle = 30)) +
+  labs(x = "", y = "Marine capture\nclimate risk", color = "") +
+  scale_color_manual(values = artis_palette(6)) +
+  facet_wrap(~ region))
+  
+if(!file.exists("../images/558_project")) {
+  dir.create("../images/558_project")
+}
+
+ggsave("../images/558_project/risk_time_series.jpg", risk_time_series, width = 4.5, height = 3, units = "in", device = "jpg")
+```
+
+
+```{r save risk data to .csv}
+write.csv(all_risk_data,"../output/all_risk_data_fish558.csv")
+```
+
